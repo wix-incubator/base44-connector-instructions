@@ -16,4 +16,4 @@ CRITICAL when using @wix/stores business solution: Use only Catalog V3 modules (
 
 CRITICAL when working with Wix Media (images, videos, etc) use the Wix Media SDK: https://dev.wix.com/docs/sdk/articles/work-with-the-sdk/work-with-wix-media.md
 
-Rules: (1) Set token via headers in createClient, never 'auth'. (2) Pass the entity/data object directly to create/update (e.g. updateProduct(id, data) not updateProduct(id, { product: data })); check the reference for required/updatable fields. (3) Group functions by business model into fewer backend files to reduce deployment time. (4) Test the functions to make sure that they are working as expected.
+Rules: (1) Set token via headers in createClient, never 'auth'. (2) Pass the entity/data object directly to create/update (e.g. updateProduct(id, data) not updateProduct(id, { product: data })); check the reference for required/updatable fields. (3) Group functions by business model into fewer backend files to reduce deployment time. (4) IMPORTANT test the generated Base44 backend functions to make sure that they are working as expected and fix them if they are not working.
