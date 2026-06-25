@@ -1,6 +1,6 @@
 ---
 name: wix-storefront
-description: Client-only Wix eCommerce storefront scaffold (dependency-free REST). Use when building or extending a Wix-powered store over an existing stocked Wix site — wiring live product fetching, a Wix-owned cart (add/update/remove), and redirect-session checkout. The public WIX_CLIENT_ID is provided in the handoff prompt and hardcoded into the snippet (it is buyer-facing, not a secret). Read-only catalog; the merchant adds products in the Wix dashboard. Never provisions, never mocks products.
+description: Client-only Wix eCommerce storefront scaffold (dependency-free REST). Use when building or extending a Wix-powered store over an existing stocked Wix site — wiring live product fetching, categories, a Wix-owned cart (add/update/remove), and redirect-session checkout. The public WIX_CLIENT_ID is provided in the handoff prompt and hardcoded into the snippet (it is buyer-facing, not a secret). Read-only catalog; the merchant adds products in the Wix dashboard. Never provisions, never mocks products.
 ---
 
 # Wix Storefront Skill
@@ -12,7 +12,7 @@ go through the eCom cart + redirect-session.
 ## When to use
 - User wants a Wix eCommerce store or asks to "connect Wix".
 - Replacing placeholder/mock products with live Wix data.
-- Adding cart, checkout, or product detail pages over an existing Wix Stores catalog.
+- Adding cart, checkout, categories, or product detail pages over an existing Wix Stores catalog.
 
 ## Prerequisites
 1. A Wix site with **Wix Stores installed and products already added** (this skill does
@@ -35,19 +35,30 @@ however the project wants; wire it to these two snippets. Copy them into the app
   the id from the prompt (replace the `<YOUR-CLIENT-ID>` placeholder). The visitor refresh
   token IS the cart identity; it is persisted to localStorage. Do not re-mint anonymously
   per load or the cart silently empties.
-- `src/rest/ecom.js` — `fetchProducts`, `getProductBySlug`, `normalizeProduct`,
-  `addToCart`, `getCurrentCart`, `updateCartLineQuantity`, `removeFromCart`, `checkout`,
-  `countProducts`, `formatPrice`.
+- `src/rest/ecom.js` — exports:
+  - **Products:** `queryProducts`, `getProductBySlug`, `countProducts`
+  - **Categories:** `queryCategories`, `getCategoryBySlug`
+  - **Cart:** `addToCart`, `updateCartItemQuantity`, `removeFromCart`, `getCurrentCart`, `emptyCart`
+  - **Checkout:** `checkout`
+
+The Product and Cart shapes are documented as JSDoc comments at the top of `ecom.js`.
+Read them before building the UI — they describe the key fields and link to the full API
+reference for anything not shown.
 
 ## How to wire it (UI is the project's choice)
-- **Product grid / PDP** — `fetchProducts()` → `normalizeProduct` for the listing;
-  `getProductBySlug(slug)` for a detail page (returns null on miss — show a not-found
-  state, never invent a product).
-- **Cart** — `addToCart(catalogItemId)`, `updateCartLineQuantity(lineId, qty)`,
-  `removeFromCart(lineId)`, `getCurrentCart()`. The cart lives on Wix, keyed by the
-  visitor identity — read it back with `getCurrentCart()` rather than mirroring it.
+- **Product grid** — `queryProducts()` for the listing; pass `nextCursor` back as `cursor`
+  to load the next page. Render fields directly from the Wix product object (see the
+  `Product` typedef in `ecom.js` for key fields).
+- **PDP** — `getProductBySlug(slug)` keyed off the URL slug; returns null on miss — show
+  a not-found state, never invent a product.
+- **Categories** — `queryCategories()` for a category menu; `getCategoryBySlug(slug)` for
+  a category landing page.
+- **Cart** — `addToCart(catalogItemId)`, `updateCartItemQuantity(lineItemId, qty)`,
+  `removeFromCart(lineItemId)`, `emptyCart()`. Use `cart.lineItems[].id` as `lineItemId`
+  (not `catalogItemId`) for mutations. Read the cart back with `getCurrentCart()` rather
+  than mirroring it locally.
 - **Checkout** — `window.location.href = await checkout()`. After the buyer returns from
-  hosted checkout the order is placed and the current cart is empty, so re-fetch with
+  hosted checkout the order is placed and the cart is empty — re-fetch with
   `getCurrentCart()` on return (e.g. on mount + `visibilitychange`) to clear the UI.
 - **Empty state** — if `countProducts()` is 0, show an empty state telling the user to
   add products in their Wix dashboard. Never invent products.
@@ -59,18 +70,13 @@ however the project wants; wire it to these two snippets. Copy them into the app
 - ❌ Never mock products — render live Wix data or the empty state.
 - ❌ Never generate fake reviews, ratings, or testimonials. Empty review UI only.
 - ✅ Set `WIX_CLIENT_ID` from the prompt's value (public client id — safe to hardcode).
-- ✅ `lineId` for cart mutations is the cart `LineItem.id`, not `catalogItemId`.
+- ✅ `lineItemId` for cart mutations is `cart.lineItems[].id`, not `catalogItemId`.
 - The engine fails loudly on purpose: `addToCart`/`checkout` throw on out-of-stock or
   empty carts. A green path means it is really buyable — don't swallow these.
 
-## Scope
-eCommerce only (products + cart + checkout + PDP + empty state). For content sections
-(blog/lookbook), `src/rest/data.js` reads public-read CMS collections — optional, not
-part of this path. Provisioning/admin is out of scope (see `wix-headless-from-design`).
-
 ## Beyond the snippets
 The snippets cover the common storefront paths. If you hit a use case they don't cover
-(e.g. coupons, members/auth, a product field the snippets don't expose), make the call
+(e.g. coupons, members/auth, a product field not shown in the typedef), make the call
 yourself with `wixApiRequest` — but look up the exact endpoint, HTTP method, and request
 body in the **official Wix API reference** first; never guess:
 - Official Wix API reference: https://dev.wix.com/docs/api-reference

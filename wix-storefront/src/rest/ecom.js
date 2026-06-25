@@ -3,19 +3,71 @@ import { wixApiRequest } from "./client.js";
 // Stores app id — required inside catalogReference for store products.
 const STORES_APP_ID = "215238eb-22a5-4c36-9e7b-e7c08025e04e";
 
-/** List products (one page). Bump `limit` or wire cursor paging for large catalogs. */
-export async function fetchProducts(limit = 100) {
+/**
+ * Wix Stores V3 Product — key fields for building a storefront.
+ * Full model: https://dev.wix.com/docs/api-reference/business-solutions/stores/catalog-v3/products-v3/query-products
+ *
+ *   id                                      {string}   Product GUID.
+ *   name                                    {string}   Display name.
+ *   slug                                    {string}   URL slug for PDP routing.
+ *   visible                                 {boolean}  Whether shown to site visitors.
+ *   productType                             {string}   "PHYSICAL" | "DIGITAL"
+ *   mainCategoryId                          {string}   Primary category GUID.
+ *   media.main.image                        {object}   Primary image:
+ *                                                      { id, url, height, width, altText }
+ *   actualPriceRange.minValue.amount        {string}   Lowest variant price (decimal string).
+ *   actualPriceRange.maxValue.amount        {string}   Highest variant price (decimal string).
+ *   inventory.availabilityStatus            {string}   "IN_STOCK" | "OUT_OF_STOCK" |
+ *                                                      "PARTIALLY_OUT_OF_STOCK"
+ *   options                                 {array}    Product options (e.g. Size, Color):
+ *                                                      [{
+ *                                                        id, name,
+ *                                                        optionRenderType: "TEXT_CHOICES" | "COLOR_CHOICES",
+ *                                                        choicesSettings: {
+ *                                                          choices: [{ choiceId, key, name, inStock, visible }]
+ *                                                        }
+ *                                                      }]
+ *   variantSummary.variantCount             {number}   Total number of variants.
+ */
+
+/**
+ * Wix eCom Cart — key fields for building a cart UI.
+ * Full model: https://dev.wix.com/docs/api-reference/business-solutions/e-commerce/purchase-flow/cart/get-cart
+ *
+ *   id                                      {string}  Cart GUID.
+ *   currency                                {string}  ISO-4217 currency code.
+ *   lineItems                               {array}
+ *     id                                    {string}  Line item GUID (lineItemId).
+ *                                                     Pass to updateCartItemQuantity / removeFromCart.
+ *     quantity                              {number}
+ *     catalogReference.catalogItemId        {string}  Product GUID.
+ *     productName.original                  {string}  Display name.
+ *     price.formattedAmount                 {string}  Price after discounts, with currency symbol.
+ *     image.url                             {string}  Line item image URL.
+ *     availability.status                   {string}  "AVAILABLE" | "NOT_AVAILABLE" |
+ *                                                     "PARTIALLY_AVAILABLE" | "NOT_FOUND"
+ */
+
+/**
+ * Query products (one page).
+ * @param {{ limit?: number, cursor?: string }} [options]
+ * @returns {Promise<{ products: object[], nextCursor: string|null }>}
+ */
+export async function queryProducts({ limit = 100, cursor } = {}) {
   const res = await wixApiRequest("/stores/v3/products/query", {
     method: "POST",
-    body: { query: { cursorPaging: { limit } } },
+    body: { query: { cursorPaging: cursor ? { limit, cursor } : { limit } } },
   });
-  return res?.products ?? [];
+  return {
+    products: res?.products ?? [],
+    nextCursor: res?.pagingMetadata?.cursors?.next ?? null,
+  };
 }
 
 /**
- * Fetch a single product by slug — for a product (PDP) page, keyed off the URL
- * slug. This is the analog of Shopify's `fetchProductByHandle`: storefront routes
- * carry the slug, not the raw id. Returns null if not found.
+ * Fetch a product by its URL slug. Returns null if not found.
+ * @param {string} slug
+ * @returns {Promise<object|null>}
  */
 export async function getProductBySlug(slug) {
   const res = await wixApiRequest(`/stores/v3/products/slug/${encodeURIComponent(slug)}`, { method: "GET" });
@@ -23,75 +75,26 @@ export async function getProductBySlug(slug) {
 }
 
 /**
- * Flat view model for a design's product grid / PDP. Wix V3 products are deep and a
- * few fields live in more than one place across query vs get-by-slug responses, so
- * `normalizeProduct` reads them defensively into this stable shape.
- *
- * @typedef {Object} ProductView
- * @property {string} id
- * @property {string} slug
- * @property {string} name
- * @property {number} priceCents  Price in CENTS (Wix returns currency units).
- * @property {string} [currency]
- * @property {string} [image]
- * @property {boolean} inStock
- * @property {*} raw  The untouched Wix product, for anything this view model drops.
- */
-
-/**
- * Map a Wix V3 storefront product → the flat view model a design renders from
- * (the analog of reshaping a Shopify product). Replaces the design's hardcoded
- * product objects. Reads price/image/availability defensively across V3 response
- * shapes. Pass a name-keyed `enrichment` sidecar for presentation-only fields the
- * design has but Wix doesn't (category, badge, swatches) — it shallow-overrides
- * the mapped fields.
- *
- * @param {*} p
- * @param {Record<string, Partial<ProductView>>} [enrichment]
- * @returns {ProductView}
- */
-export function normalizeProduct(p, enrichment = {}) {
-  const amount =
-    p?.actualPriceRange?.minValue?.amount ??
-    p?.variantsInfo?.variants?.[0]?.price?.actualPrice?.amount ??
-    p?.price?.actualPrice?.amount ??
-    "0";
-  const mainImage = p?.media?.main?.image;
-  const view = {
-    id: p?.id ?? p?._id,
-    slug: p?.slug,
-    name: p?.name,
-    priceCents: Math.round(Number(amount) * 100),
-    currency: p?.currency ?? p?.actualPriceRange?.minValue?.currency,
-    image: typeof mainImage === "string" ? mainImage : mainImage?.url,
-    inStock: (p?.inventory?.availabilityStatus ?? "IN_STOCK") === "IN_STOCK",
-    raw: p,
-  };
-  return { ...view, ...enrichment[view.name] };
-}
-
-function findLine(cart, catalogItemId) {
-  return (cart?.lineItems ?? []).find((l) => l.catalogReference?.catalogItemId === catalogItemId);
-}
-
-/**
  * Add a product to the visitor's current cart.
- * Fails loudly: Wix will add an out-of-stock item as a `quantity: 0`, `NOT_AVAILABLE`
- * line WITHOUT erroring, so we inspect the returned line and throw if it isn't sellable.
+ * Wix silently adds out-of-stock items with quantity 0 / NOT_AVAILABLE — we throw instead
+ * of letting the buyer reach checkout with an unbuyable line.
+ * @param {string} catalogItemId
+ * @param {number} [quantity]
+ * @returns {Promise<object>} Updated cart.
  */
 export async function addToCart(catalogItemId, quantity = 1) {
   const res = await wixApiRequest("/ecom/v1/carts/current/add-to-cart", {
     method: "POST",
     body: { lineItems: [{ catalogReference: { appId: STORES_APP_ID, catalogItemId }, quantity }] },
   });
-  const line = findLine(res?.cart, catalogItemId);
+  const line = (res?.cart?.lineItems ?? []).find((l) => l.catalogReference?.catalogItemId === catalogItemId);
   if (line?.availability?.status && line.availability.status !== "AVAILABLE") {
     throw new Error(`Item not available for sale (status: ${line.availability.status}). Is it in stock?`);
   }
   return res?.cart;
 }
 
-/** Read the visitor's current cart (null if none exists yet). */
+/** Read the visitor's current cart. Returns null if no cart exists yet. */
 export async function getCurrentCart() {
   try {
     const res = await wixApiRequest("/ecom/v1/carts/current", { method: "GET" });
@@ -102,10 +105,22 @@ export async function getCurrentCart() {
 }
 
 /**
+ * Remove all items from the current cart. No-ops if the cart is already empty.
+ * @returns {Promise<object|null>} Updated cart, or null if none existed.
+ */
+export async function emptyCart() {
+  const cart = await getCurrentCart();
+  if (!cart?.lineItems?.length) return cart;
+  const res = await wixApiRequest("/ecom/v1/carts/current/remove-line-items", {
+    method: "POST",
+    body: { lineItemIds: cart.lineItems.map((l) => l.id) },
+  });
+  return res?.cart;
+}
+
+/**
  * Create a checkout from the current cart and return the hosted checkout URL.
- * Guards the silent-failure modes instead of redirecting to a broken checkout:
- * empty cart, unavailable lines, or a missing redirect URL all throw.
- *
+ * Throws on empty cart, unavailable lines, or a missing redirect URL.
  * @returns {Promise<string>}
  */
 export async function checkout() {
@@ -135,39 +150,70 @@ export async function checkout() {
 }
 
 /**
- * Update the quantity of one cart line. `lineId` is the cart LineItem.id
- * (from getCurrentCart().lineItems[].id), not the catalog item id. Wix caps the
- * result at remaining stock, so the returned line quantity may be lower than asked.
+ * Update the quantity of a cart line.
+ * `lineItemId` is `cart.lineItems[].id`, not `catalogItemId`.
+ * Wix caps the result at remaining stock — the returned quantity may be lower than requested.
+ * @returns {Promise<object>} Updated cart.
  */
-export async function updateCartLineQuantity(lineId, quantity) {
+export async function updateCartItemQuantity(lineItemId, quantity) {
   const res = await wixApiRequest("/ecom/v1/carts/current/update-line-items-quantity", {
     method: "POST",
-    body: { lineItems: [{ id: lineId, quantity }] },
-  });
-  return res?.cart;
-}
-
-/** Remove one line from the current cart by its cart LineItem.id. Returns the updated cart. */
-export async function removeFromCart(lineId) {
-  const res = await wixApiRequest("/ecom/v1/carts/current/remove-line-items", {
-    method: "POST",
-    body: { lineItemIds: [lineId] },
+    body: { lineItems: [{ id: lineItemId, quantity }] },
   });
   return res?.cart;
 }
 
 /**
- * Number of products in the catalog — drives the empty state (0 → "add products in
- * the Wix dashboard"). Reads one page (up to 100); wire cursor paging for a true
- * count on large catalogs. Empty-state logic only needs 0 vs. >0.
- *
+ * Remove a line from the current cart by its `cart.lineItems[].id`. Returns the updated cart.
+ * @param {string} lineItemId
+ */
+export async function removeFromCart(lineItemId) {
+  const res = await wixApiRequest("/ecom/v1/carts/current/remove-line-items", {
+    method: "POST",
+    body: { lineItemIds: [lineItemId] },
+  });
+  return res?.cart;
+}
+
+/**
+ * Total number of visible products. Used for empty-state logic (0 → prompt user to add products).
  * @returns {Promise<number>}
  */
 export async function countProducts() {
-  return (await fetchProducts(100)).length;
+  const res = await wixApiRequest("/stores/v3/products/count", { method: "POST", body: {} });
+  return res?.count ?? 0;
 }
 
-/** Display helper: cents → localized currency string (mirrors Shopify's formatPrice). */
-export function formatPrice(amountCents, currency = "USD") {
-  return new Intl.NumberFormat(undefined, { style: "currency", currency }).format(amountCents / 100);
+/**
+ * Query Wix Stores categories (one page).
+ * @param {{ limit?: number, cursor?: string }} [options]
+ * @returns {Promise<{ categories: object[], nextCursor: string|null }>}
+ */
+export async function queryCategories({ limit = 100, cursor } = {}) {
+  const res = await wixApiRequest("/categories/v1/categories/query", {
+    method: "POST",
+    body: {
+      treeReference: { appNamespace: "@wix/stores", treeKey: null },
+      query: { cursorPaging: cursor ? { limit, cursor } : { limit } },
+    },
+  });
+  return {
+    categories: res?.categories ?? [],
+    nextCursor: res?.pagingMetadata?.cursors?.next ?? null,
+  };
+}
+
+/**
+ * Get a single category by its URL slug. Returns null if not found.
+ * Category fields: id, name, slug, visible, description, image, itemCounter, parentCategory.id
+ * Full model: https://dev.wix.com/docs/api-reference/business-solutions/stores/catalog-v3/categories/get-category-by-slug
+ * @param {string} slug
+ * @returns {Promise<object|null>}
+ */
+export async function getCategoryBySlug(slug) {
+  const res = await wixApiRequest(`/categories/v1/categories/slug/${encodeURIComponent(slug)}`, {
+    method: "GET",
+    query: { "treeReference.appNamespace": "@wix/stores" },
+  });
+  return res?.category ?? null;
 }
