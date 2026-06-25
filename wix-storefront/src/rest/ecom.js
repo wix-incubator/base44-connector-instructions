@@ -30,6 +30,7 @@ const STORES_APP_ID = "215238eb-22a5-4c36-9e7b-e7c08025e04e";
  *                                                        }
  *                                                      }]
  *   variantSummary.variantCount             {number}   Total number of variants.
+ *   plainDescription                        {string}   Product description in HTML format.
  *   variantsInfo.variants                   {array}    [{ id, optionChoiceIds: [{ optionId, choiceId }] }].
  *                                                      Variant id → addToCart's optional variantId
  *                                                      (products with options). Only from
@@ -63,7 +64,7 @@ export async function queryProducts({ limit = 100, cursor } = {}) {
   const res = await wixApiRequest("/stores/v3/products/query", {
     method: "POST",
     body: {
-      fields: ["CURRENCY"],
+      fields: ["CURRENCY", "PLAIN_DESCRIPTION"],
       query: {
         filter: { visible: true },
         cursorPaging: cursor ? { limit, cursor } : { limit },
@@ -84,7 +85,7 @@ export async function queryProducts({ limit = 100, cursor } = {}) {
 export async function getProductBySlug(slug) {
   const res = await wixApiRequest(`/stores/v3/products/slug/${encodeURIComponent(slug)}`, {
     method: "GET",
-    query: { fields: "CURRENCY" },
+    query: { fields: ["CURRENCY", "PLAIN_DESCRIPTION"] },
   });
   return res?.product ?? null;
 }
