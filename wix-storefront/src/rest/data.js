@@ -1,7 +1,7 @@
-import { wixApiRequest } from "./client";
+import { wixApiRequest } from "./client.js";
 
 /** Query a collection — direct call, results on `.dataItems` (each is `{ id, data }`). */
-export async function fetchItems(collectionId: string) {
+export async function fetchItems(collectionId) {
   const res = await wixApiRequest("/data/v2/items/query", {
     method: "POST",
     body: {
@@ -13,7 +13,7 @@ export async function fetchItems(collectionId: string) {
 }
 
 /** Insert a new item. Returns the created `dataItem`. */
-export async function insertItem(collectionId: string, data: Record<string, unknown>) {
+export async function insertItem(collectionId, data) {
   const res = await wixApiRequest("/data/v2/items", {
     method: "POST",
     body: { dataCollectionId: collectionId, dataItem: { data } },
@@ -22,7 +22,7 @@ export async function insertItem(collectionId: string, data: Record<string, unkn
 }
 
 /** Update an existing item (must include its `id`). */
-export async function updateItem(collectionId: string, id: string, data: Record<string, unknown>) {
+export async function updateItem(collectionId, id, data) {
   const res = await wixApiRequest(`/data/v2/items/${id}`, {
     method: "PUT",
     body: { dataCollectionId: collectionId, dataItem: { id, data } },
@@ -31,7 +31,7 @@ export async function updateItem(collectionId: string, id: string, data: Record<
 }
 
 /** Remove an item by id. */
-export async function removeItem(collectionId: string, id: string) {
+export async function removeItem(collectionId, id) {
   return wixApiRequest(`/data/v2/items/${id}`, {
     method: "DELETE",
     query: { dataCollectionId: collectionId },

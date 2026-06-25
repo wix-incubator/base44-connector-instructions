@@ -14,8 +14,8 @@ redirect-session checkout. Agent-agnostic — not tied to any one builder.
 ## Contents
 - `SKILL.md` — the skill: when to use, the API, how to wire it, hard rules, checklist.
 - `PROMPT.md` — the slim copyable Business Manager handoff prompt (`<WIX_CLIENT_ID>` slot).
-- `src/rest/client.ts` — visitor-token mint/refresh + transport (set `WIX_CLIENT_ID` here).
-- `src/rest/ecom.ts` — products, cart, checkout helpers.
-- `src/rest/data.ts` — optional public-read CMS reads for content sections.
+- `src/rest/client.js` — visitor-token mint/refresh + transport (set `WIX_CLIENT_ID` here).
+- `src/rest/ecom.js` — products, cart, checkout helpers.
+- `src/rest/data.js` — optional public-read CMS reads for content sections.
 
 Start with `SKILL.md`.
