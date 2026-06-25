@@ -36,7 +36,7 @@ however the project wants; wire it to these two snippets. Copy them into the app
   token IS the cart identity; it is persisted to localStorage. Do not re-mint anonymously
   per load or the cart silently empties.
 - `src/rest/ecom.js` — exports:
-  - **Products:** `queryProducts`, `getProductBySlug`, `countProducts`
+  - **Products:** `queryProducts`, `queryProductsByCategory`, `getProductBySlug`, `countProducts`
   - **Categories:** `queryCategories`, `getCategoryBySlug`
   - **Cart:** `addToCart`, `updateCartItemQuantity`, `removeFromCart`, `getCurrentCart`
   - **Checkout:** `checkout`
@@ -54,7 +54,8 @@ reference for anything not shown.
 - **PDP** — `getProductBySlug(slug)` keyed off the URL slug; returns null on miss — show
   a not-found state, never invent a product.
 - **Categories** — `queryCategories()` for a category menu; `getCategoryBySlug(slug)` for
-  a category landing page.
+  a category landing page. Pass `category.id` to `queryProductsByCategory(categoryId, { limit?, cursor? })`
+  to list only the products in that category; paginate exactly like `queryProducts`.
 - **Cart** — `addToCart(catalogItemId, variantId?, qty?)`, `updateCartItemQuantity(lineItemId, qty)`,
   `removeFromCart(lineItemId)`. `variantId` is optional — omit it for products without variants;
   for a product with options pass the chosen `product.variantsInfo.variants[].id` from a

@@ -185,6 +185,37 @@ export async function removeFromCart(lineItemId) {
 }
 
 /**
+ * Query visible products belonging to a category (one page).
+ * Uses the catalog search API which supports category filtering.
+ * @param {string} categoryId  Category GUID (`category.id` from queryCategories / getCategoryBySlug).
+ * @param {{ limit?: number, cursor?: string }} [options]
+ * @returns {Promise<{ products: object[], nextCursor: string|null }>}
+ */
+export async function queryProductsByCategory(categoryId, { limit = 100, cursor } = {}) {
+  const res = await wixApiRequest("/stores/v3/products/search", {
+    method: "POST",
+    body: {
+      fields: ["CURRENCY", "PLAIN_DESCRIPTION"],
+      search: {
+        ...(cursor
+          ? { cursorPaging: { limit, cursor } }
+          : {
+              cursorPaging: { limit },
+              filter: {
+                visible: true,
+                "allCategoriesInfo.categories": { $matchItems: [{ categoryId }] },
+              },
+            }),
+      },
+    },
+  });
+  return {
+    products: res?.products ?? [],
+    nextCursor: res?.pagingMetadata?.cursors?.next ?? null,
+  };
+}
+
+/**
  * Total number of visible products. Used for empty-state logic (0 → prompt user to add products).
  * @returns {Promise<number>}
  */
