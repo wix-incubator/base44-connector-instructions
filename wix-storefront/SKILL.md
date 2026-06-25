@@ -55,9 +55,10 @@ reference for anything not shown.
   a not-found state, never invent a product.
 - **Categories** — `queryCategories()` for a category menu; `getCategoryBySlug(slug)` for
   a category landing page.
-- **Cart** — `addToCart(catalogItemId, variantId, qty?)`, `updateCartItemQuantity(lineItemId, qty)`,
-  `removeFromCart(lineItemId)`. Get `variantId` via `resolveVariantId(product, selectedChoices?)`
-  from a `getProductBySlug()` product (`queryProducts()` omits variants). Use `cart.lineItems[].id`
+- **Cart** — `addToCart(catalogItemId, variantId?, qty?)`, `updateCartItemQuantity(lineItemId, qty)`,
+  `removeFromCart(lineItemId)`. `variantId` is optional — omit it for products without variants;
+  for a product with options pass the chosen `product.variantsInfo.variants[].id` from a
+  `getProductBySlug()` product (`queryProducts()` omits variants). Use `cart.lineItems[].id`
   as `lineItemId` (not `catalogItemId`) for mutations. Read the cart back with `getCurrentCart()`
   rather than mirroring it locally.
 - **Checkout** — `window.location.href = await checkout()`. After the buyer returns from
@@ -74,8 +75,8 @@ reference for anything not shown.
 - ❌ Never generate fake reviews, ratings, or testimonials. Empty review UI only.
 - ✅ Set `WIX_CLIENT_ID` from the prompt's value (public client id — safe to hardcode).
 - ✅ `lineItemId` for cart mutations is `cart.lineItems[].id`, not `catalogItemId`.
-- ✅ Every `addToCart` line needs a `variantId` (`product.variantsInfo.variants[].id`) — never
-  add by `catalogItemId` alone, even for option-less products.
+- ✅ Pass `addToCart`'s `variantId` (`product.variantsInfo.variants[].id`) only for products with
+  variants; omit it for products without variants.
 - The engine fails loudly on purpose: `addToCart`/`checkout` throw on out-of-stock or
   empty carts. A green path means it is really buyable — don't swallow these.
 
