@@ -30,7 +30,7 @@ go through the eCom cart + redirect-session.
 ## The API (copy as-is; do not re-derive it)
 This skill ships only the REST layer — no UI components. Build the storefront's UI
 however the project wants; wire it to these two snippets. Copy them into the app (e.g.
-`src/lib/`) and only adjust import paths:
+`src/api/`) and only adjust import paths:
 - `src/rest/client.js` — visitor-token mint/refresh + transport. Set `WIX_CLIENT_ID` to
   the id from the prompt (replace the `<YOUR-CLIENT-ID>` placeholder). The visitor refresh
   token IS the cart identity; it is persisted to localStorage. Do not re-mint anonymously
@@ -38,7 +38,7 @@ however the project wants; wire it to these two snippets. Copy them into the app
 - `src/rest/ecom.js` — exports:
   - **Products:** `queryProducts`, `getProductBySlug`, `countProducts`
   - **Categories:** `queryCategories`, `getCategoryBySlug`
-  - **Cart:** `addToCart`, `updateCartItemQuantity`, `removeFromCart`, `getCurrentCart`, `emptyCart`
+  - **Cart:** `addToCart`, `updateCartItemQuantity`, `removeFromCart`, `getCurrentCart`
   - **Checkout:** `checkout`
 
 The Product and Cart shapes are documented as JSDoc comments at the top of `ecom.js`.
@@ -46,15 +46,17 @@ Read them before building the UI — they describe the key fields and link to th
 reference for anything not shown.
 
 ## How to wire it (UI is the project's choice)
-- **Product grid** — `queryProducts()` for the listing; pass `nextCursor` back as `cursor`
-  to load the next page. Render fields directly from the Wix product object (see the
-  `Product` typedef in `ecom.js` for key fields).
+- **Product grid** — `queryProducts()` for the listing (visible products only); pass
+  `nextCursor` back as `cursor` to load the next page. Render fields directly from the Wix
+  product object (see the `Product` typedef in `ecom.js` for key fields). For price, use
+  `actualPriceRange.minValue.formattedAmount` (already includes the currency symbol) — no
+  manual formatting needed.
 - **PDP** — `getProductBySlug(slug)` keyed off the URL slug; returns null on miss — show
   a not-found state, never invent a product.
 - **Categories** — `queryCategories()` for a category menu; `getCategoryBySlug(slug)` for
   a category landing page.
 - **Cart** — `addToCart(catalogItemId)`, `updateCartItemQuantity(lineItemId, qty)`,
-  `removeFromCart(lineItemId)`, `emptyCart()`. Use `cart.lineItems[].id` as `lineItemId`
+  `removeFromCart(lineItemId)`. Use `cart.lineItems[].id` as `lineItemId`
   (not `catalogItemId`) for mutations. Read the cart back with `getCurrentCart()` rather
   than mirroring it locally.
 - **Checkout** — `window.location.href = await checkout()`. After the buyer returns from
@@ -79,7 +81,7 @@ The snippets cover the common storefront paths. If you hit a use case they don't
 (e.g. coupons, members/auth, a product field not shown in the typedef), make the call
 yourself with `wixApiRequest` — but look up the exact endpoint, HTTP method, and request
 body in the **official Wix API reference** first; never guess:
-- Official Wix API reference: https://dev.wix.com/docs/api-reference
+- Official Wix API reference: https://dev.wix.com/docs/api-reference.md
 
 Keep the snippets as the default for everything they already do; reach for the API
 reference only for the gap.

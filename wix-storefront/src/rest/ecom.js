@@ -16,7 +16,9 @@ const STORES_APP_ID = "215238eb-22a5-4c36-9e7b-e7c08025e04e";
  *   media.main.image                        {object}   Primary image:
  *                                                      { id, url, height, width, altText }
  *   actualPriceRange.minValue.amount        {string}   Lowest variant price (decimal string).
+ *   actualPriceRange.minValue.formattedAmount {string} Lowest price with currency symbol (e.g. "$199.99").
  *   actualPriceRange.maxValue.amount        {string}   Highest variant price (decimal string).
+ *   actualPriceRange.maxValue.formattedAmount {string} Highest price with currency symbol.
  *   inventory.availabilityStatus            {string}   "IN_STOCK" | "OUT_OF_STOCK" |
  *                                                      "PARTIALLY_OUT_OF_STOCK"
  *   options                                 {array}    Product options (e.g. Size, Color):
@@ -56,7 +58,13 @@ const STORES_APP_ID = "215238eb-22a5-4c36-9e7b-e7c08025e04e";
 export async function queryProducts({ limit = 100, cursor } = {}) {
   const res = await wixApiRequest("/stores/v3/products/query", {
     method: "POST",
-    body: { query: { cursorPaging: cursor ? { limit, cursor } : { limit } } },
+    body: {
+      fields: ["CURRENCY"],
+      query: {
+        filter: { visible: true },
+        cursorPaging: cursor ? { limit, cursor } : { limit },
+      },
+    },
   });
   return {
     products: res?.products ?? [],
@@ -70,7 +78,10 @@ export async function queryProducts({ limit = 100, cursor } = {}) {
  * @returns {Promise<object|null>}
  */
 export async function getProductBySlug(slug) {
-  const res = await wixApiRequest(`/stores/v3/products/slug/${encodeURIComponent(slug)}`, { method: "GET" });
+  const res = await wixApiRequest(`/stores/v3/products/slug/${encodeURIComponent(slug)}`, {
+    method: "GET",
+    query: { fields: "CURRENCY" },
+  });
   return res?.product ?? null;
 }
 
@@ -102,20 +113,6 @@ export async function getCurrentCart() {
   } catch {
     return null;
   }
-}
-
-/**
- * Remove all items from the current cart. No-ops if the cart is already empty.
- * @returns {Promise<object|null>} Updated cart, or null if none existed.
- */
-export async function emptyCart() {
-  const cart = await getCurrentCart();
-  if (!cart?.lineItems?.length) return cart;
-  const res = await wixApiRequest("/ecom/v1/carts/current/remove-line-items", {
-    method: "POST",
-    body: { lineItemIds: cart.lineItems.map((l) => l.id) },
-  });
-  return res?.cart;
 }
 
 /**
@@ -180,7 +177,10 @@ export async function removeFromCart(lineItemId) {
  * @returns {Promise<number>}
  */
 export async function countProducts() {
-  const res = await wixApiRequest("/stores/v3/products/count", { method: "POST", body: {} });
+  const res = await wixApiRequest("/stores/v3/products/count", {
+    method: "POST",
+    body: { filter: { visible: true } },
+  });
   return res?.count ?? 0;
 }
 
