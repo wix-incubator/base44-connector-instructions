@@ -19,7 +19,7 @@ go through the eCom cart + redirect-session.
    NOT provision — it's read-only over the catalog).
 2. The site's public headless **`WIX_CLIENT_ID`**, provided in the handoff prompt (the
    Wix Business Manager surfaces a copyable prompt with the id filled in — see
-   `PROMPT.md`). Paste it into `src/rest/client.ts` in place of the placeholder. It is a
+   `PROMPT.md`). Paste it into `src/rest/client.js` in place of the placeholder. It is a
    buyer-facing credential (it only mints anonymous visitor tokens), **not** a secret, so
    hardcoding/committing it is fine.
 3. The deployed app domain must be allow-listed on the OAuth client for Wix-hosted
@@ -31,11 +31,11 @@ go through the eCom cart + redirect-session.
 This skill ships only the REST layer — no UI components. Build the storefront's UI
 however the project wants; wire it to these two snippets. Copy them into the app (e.g.
 `src/lib/`) and only adjust import paths:
-- `src/rest/client.ts` — visitor-token mint/refresh + transport. Set `WIX_CLIENT_ID` to
+- `src/rest/client.js` — visitor-token mint/refresh + transport. Set `WIX_CLIENT_ID` to
   the id from the prompt (replace the `<YOUR-CLIENT-ID>` placeholder). The visitor refresh
   token IS the cart identity; it is persisted to localStorage. Do not re-mint anonymously
   per load or the cart silently empties.
-- `src/rest/ecom.ts` — `fetchProducts`, `getProductBySlug`, `normalizeProduct`,
+- `src/rest/ecom.js` — `fetchProducts`, `getProductBySlug`, `normalizeProduct`,
   `addToCart`, `getCurrentCart`, `updateCartLineQuantity`, `removeFromCart`, `checkout`,
   `countProducts`, `formatPrice`.
 
@@ -65,8 +65,18 @@ however the project wants; wire it to these two snippets. Copy them into the app
 
 ## Scope
 eCommerce only (products + cart + checkout + PDP + empty state). For content sections
-(blog/lookbook), `src/rest/data.ts` reads public-read CMS collections — optional, not
+(blog/lookbook), `src/rest/data.js` reads public-read CMS collections — optional, not
 part of this path. Provisioning/admin is out of scope (see `wix-headless-from-design`).
+
+## Beyond the snippets
+The snippets cover the common storefront paths. If you hit a use case they don't cover
+(e.g. coupons, members/auth, a product field the snippets don't expose), make the call
+yourself with `wixApiRequest` — but look up the exact endpoint, HTTP method, and request
+body in the **official Wix API reference** first; never guess:
+- Official Wix API reference: https://dev.wix.com/docs/api-reference
+
+Keep the snippets as the default for everything they already do; reach for the API
+reference only for the gap.
 
 ## Verification checklist (before declaring done)
 - [ ] `WIX_CLIENT_ID` set to the prompt's value (not the `<YOUR-CLIENT-ID>` placeholder)

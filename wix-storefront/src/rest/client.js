@@ -17,28 +17,22 @@ export const WIX_CLIENT_ID = "<YOUR-CLIENT-ID>";
 export const WIX_API_BASE = "https://www.wixapis.com";
 const OAUTH_TOKEN_URL = `${WIX_API_BASE}/oauth2/token`;
 
-interface CachedToken {
-  accessToken: string;
-  refreshToken: string;
-  expiresAt: number; // epoch ms
-}
-
 const TOKEN_STORAGE_KEY = "wix-visitor-token";
-let tokenCache: CachedToken | null = null;
+let tokenCache = null;
 
-function loadToken(): CachedToken | null {
+function loadToken() {
   if (tokenCache) return tokenCache;
   if (typeof window === "undefined") return null;
   try {
     const raw = window.localStorage.getItem(TOKEN_STORAGE_KEY);
-    if (raw) tokenCache = JSON.parse(raw) as CachedToken;
+    if (raw) tokenCache = JSON.parse(raw);
   } catch {
     /* ignore disabled/full storage */
   }
   return tokenCache;
 }
 
-function saveToken(t: CachedToken) {
+function saveToken(t) {
   tokenCache = t;
   if (typeof window === "undefined") return;
   try {
@@ -48,14 +42,14 @@ function saveToken(t: CachedToken) {
   }
 }
 
-async function mintToken(body: Record<string, string>): Promise<CachedToken> {
+async function mintToken(body) {
   const res = await fetch(OAUTH_TOKEN_URL, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
   if (!res.ok) throw new Error(`Wix OAuth failed: ${res.status}`);
-  const data: { access_token: string; refresh_token: string; expires_in: number } = await res.json();
+  const data = await res.json();
   return {
     accessToken: data.access_token,
     refreshToken: data.refresh_token,
@@ -72,7 +66,7 @@ async function mintToken(body: Record<string, string>): Promise<CachedToken> {
  * every reload / after the 4h token lifetime. Anonymous mint happens only once
  * (or when no refresh token is stored).
  */
-async function getAccessToken(): Promise<string> {
+async function getAccessToken() {
   const cached = loadToken();
   if (cached && cached.expiresAt > Date.now() + 60_000) return cached.accessToken;
 
@@ -90,17 +84,14 @@ async function getAccessToken(): Promise<string> {
   return fresh.accessToken;
 }
 
-interface WixFetchOptions {
-  method?: "GET" | "POST" | "PUT" | "DELETE";
-  body?: unknown;
-  query?: Record<string, string | undefined>;
-}
-
 /**
  * Core transport — mirrors storefrontApiRequest. Adds the Authorization header,
  * resolves the path against the Wix API base, parses JSON, surfaces errors.
+ *
+ * @param {string} path
+ * @param {{ method?: "GET"|"POST"|"PUT"|"DELETE", body?: unknown, query?: Record<string, string | undefined> }} [options]
  */
-export async function wixApiRequest<T = any>(path: string, options: WixFetchOptions = {}): Promise<T | undefined> {
+export async function wixApiRequest(path, options = {}) {
   const { method = "POST", body, query } = options;
   const token = await getAccessToken();
 
@@ -130,5 +121,5 @@ export async function wixApiRequest<T = any>(path: string, options: WixFetchOpti
     throw new Error(`Wix API error ${res.status}: ${text}`);
   }
   if (res.status === 204) return undefined;
-  return (await res.json()) as T;
+  return await res.json();
 }
