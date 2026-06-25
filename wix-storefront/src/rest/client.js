@@ -98,7 +98,12 @@ export async function wixApiRequest(path, options = {}) {
   const url = new URL(path.startsWith("http") ? path : `${WIX_API_BASE}${path}`);
   if (query) {
     for (const [k, v] of Object.entries(query)) {
-      if (v !== undefined) url.searchParams.set(k, v);
+      if (v === undefined) continue;
+      if (Array.isArray(v)) {
+        for (const item of v) url.searchParams.append(k, item);
+      } else {
+        url.searchParams.set(k, v);
+      }
     }
   }
 
