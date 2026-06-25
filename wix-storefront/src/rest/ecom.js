@@ -30,6 +30,9 @@ const STORES_APP_ID = "215238eb-22a5-4c36-9e7b-e7c08025e04e";
  *                                                        }
  *                                                      }]
  *   variantSummary.variantCount             {number}   Total number of variants.
+ *   variantsInfo.variants                   {array}    [{ id, optionChoiceIds: [{ optionId, choiceId }] }].
+ *                                                      Variant id → catalogReference.options.variantId.
+ *                                                      Only from getProductBySlug, not queryProducts.
  */
 
 /**
@@ -86,19 +89,53 @@ export async function getProductBySlug(slug) {
 }
 
 /**
- * Add a product to the visitor's current cart.
- * Wix silently adds out-of-stock items with quantity 0 / NOT_AVAILABLE — we throw instead
- * of letting the buyer reach checkout with an unbuyable line.
- * @param {string} catalogItemId
+ * Resolve a `variantId` from a product loaded via getProductBySlug.
+ * Option-less products have a single variant (pass no choices); otherwise pass the buyer's
+ * chosen `{ optionId, choiceId }` pairs to match the right variant.
+ * @param {object} product
+ * @param {Array<{ optionId: string, choiceId: string }>} [selectedChoices]
+ * @returns {string} Variant GUID.
+ */
+export function resolveVariantId(product, selectedChoices = []) {
+  const variants = product?.variantsInfo?.variants ?? [];
+  if (!variants.length) {
+    throw new Error("Product has no variantsInfo — load it with getProductBySlug (queryProducts omits variants).");
+  }
+  if (!selectedChoices.length) {
+    if (variants.length > 1) {
+      throw new Error("Product has multiple variants — pass the buyer's selected option choices to resolveVariantId.");
+    }
+    return variants[0].id;
+  }
+  const match = variants.find((v) =>
+    selectedChoices.every((sel) =>
+      (v.optionChoiceIds ?? []).some((oc) => oc.optionId === sel.optionId && oc.choiceId === sel.choiceId),
+    ),
+  );
+  if (!match) throw new Error("No variant matches the selected options.");
+  return match.id;
+}
+
+/**
+ * Add a product to the visitor's current cart. Every line requires a `variantId`
+ * (use resolveVariantId). Throws on out-of-stock so the buyer can't reach checkout
+ * with an unbuyable line — Wix would otherwise add it silently at quantity 0.
+ * @param {string} catalogItemId  Product GUID (`product.id`).
+ * @param {string} variantId      `product.variantsInfo.variants[].id`.
  * @param {number} [quantity]
  * @returns {Promise<object>} Updated cart.
  */
-export async function addToCart(catalogItemId, quantity = 1) {
+export async function addToCart(catalogItemId, variantId, quantity = 1) {
+  if (!variantId) {
+    throw new Error("addToCart requires a variantId — resolve it from product.variantsInfo.variants[] (e.g. via resolveVariantId).");
+  }
   const res = await wixApiRequest("/ecom/v1/carts/current/add-to-cart", {
     method: "POST",
-    body: { lineItems: [{ catalogReference: { appId: STORES_APP_ID, catalogItemId }, quantity }] },
+    body: { lineItems: [{ catalogReference: { appId: STORES_APP_ID, catalogItemId, options: { variantId } }, quantity }] },
   });
-  const line = (res?.cart?.lineItems ?? []).find((l) => l.catalogReference?.catalogItemId === catalogItemId);
+  const line = (res?.cart?.lineItems ?? []).find(
+    (l) => l.catalogReference?.catalogItemId === catalogItemId && l.catalogReference?.options?.variantId === variantId,
+  );
   if (line?.availability?.status && line.availability.status !== "AVAILABLE") {
     throw new Error(`Item not available for sale (status: ${line.availability.status}). Is it in stock?`);
   }
