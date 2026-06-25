@@ -68,6 +68,18 @@ eCommerce only (products + cart + checkout + PDP + empty state). For content sec
 (blog/lookbook), `src/rest/data.js` reads public-read CMS collections — optional, not
 part of this path. Provisioning/admin is out of scope (see `wix-headless-from-design`).
 
+## Beyond the snippets
+The snippets cover the common storefront paths. If you hit a use case they don't cover
+(e.g. coupons, members/auth, bookings, a product field the snippets don't expose), you
+may fall back to the **official Wix SDK** rather than hand-rolling more REST. Look up the
+exact module and method first — don't guess:
+- Wix SDK docs: https://dev.wix.com/docs/sdk
+- REST API reference (if you stay on `fetch`): https://dev.wix.com/docs/rest
+
+Keep the snippets as the default for everything they already do; reach for the SDK only
+for the gap. The SDK packages are `@wix/sdk` plus the relevant business module
+(e.g. `@wix/stores`, `@wix/ecom`).
+
 ## Verification checklist (before declaring done)
 - [ ] `WIX_CLIENT_ID` set to the prompt's value (not the `<YOUR-CLIENT-ID>` placeholder)
 - [ ] Visitor token persists across reload (cart survives reload, same visitor)
