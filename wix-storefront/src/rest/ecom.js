@@ -66,7 +66,7 @@ export async function queryProducts({ limit = 100, cursor } = {}) {
     body: {
       fields: ["CURRENCY", "PLAIN_DESCRIPTION"],
       query: {
-        filter: { visible: true },
+        ...(cursor ? {} : { filter: { visible: true } }),
         cursorPaging: cursor ? { limit, cursor } : { limit },
       },
     },
