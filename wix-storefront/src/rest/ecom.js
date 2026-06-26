@@ -203,7 +203,7 @@ export async function queryProductsByCategory(categoryId, { limit = 100, cursor 
               cursorPaging: { limit },
               filter: {
                 visible: true,
-                "allCategoriesInfo.categories": { $matchItems: [{ categoryId }] },
+                "allCategoriesInfo.categories": { $matchItems: [{ id: categoryId }] },
               },
             }),
       },
