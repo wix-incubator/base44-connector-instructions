@@ -1,11 +1,11 @@
-import { wixApiRequest } from "./client.js";
+import { wixApiRequest } from "./wix-client.js";
 
 // Stores app id — required inside catalogReference for store products.
 const STORES_APP_ID = "215238eb-22a5-4c36-9e7b-e7c08025e04e";
 
 /**
  * Wix Stores V3 Product — key fields for building a storefront.
- * Full model: https://dev.wix.com/docs/api-reference/business-solutions/stores/catalog-v3/products-v3/query-products
+ * Full model: https://dev.wix.com/docs/api-reference/business-solutions/stores/catalog-v3/products-v3/query-products.md
  *
  *   id                                      {string}   Product GUID.
  *   name                                    {string}   Display name.
@@ -15,6 +15,9 @@ const STORES_APP_ID = "215238eb-22a5-4c36-9e7b-e7c08025e04e";
  *   mainCategoryId                          {string}   Primary category GUID.
  *   media.main.image                        {object}   Primary image:
  *                                                      { id, url, height, width, altText }
+ *   media.itemsInfo.items                   {array}    All product images (gallery):
+ *                                                      [{ id, altText, image: { id, url, height, width, altText }, mediaType }]
+ *                                                      Use for image galleries / carousels on the PDP.
  *   actualPriceRange.minValue.amount        {string}   Lowest variant price (decimal string).
  *   actualPriceRange.minValue.formattedAmount {string} Lowest price with currency symbol (e.g. "$199.99").
  *   actualPriceRange.maxValue.amount        {string}   Highest variant price (decimal string).
@@ -24,22 +27,61 @@ const STORES_APP_ID = "215238eb-22a5-4c36-9e7b-e7c08025e04e";
  *   options                                 {array}    Product options (e.g. Size, Color):
  *                                                      [{
  *                                                        id, name,
- *                                                        optionRenderType: "TEXT_CHOICES" | "COLOR_CHOICES",
+ *                                                        optionRenderType: "TEXT_CHOICES" | "COLOR_CHOICES" | "SWATCH_CHOICES",
  *                                                        choicesSettings: {
- *                                                          choices: [{ choiceId, key, name, inStock, visible }]
+ *                                                          choices: [{
+ *                                                            choiceId, key, name, inStock, visible,
+ *                                                            linkedMedia: [{        // images linked to this choice (may be empty)
+ *                                                              id, altText,
+ *                                                              image: { id, url, height, width, altText },
+ *                                                              mediaType
+ *                                                            }]
+ *                                                          }]
+ *                                                        }
+ *                                                      }]
+ *                                                      Use choice.linkedMedia to swap the displayed image when
+ *                                                      the buyer selects a color/swatch choice.
+ *   modifiers                               {array}    Non-variant customizations (e.g. engraving, gift wrap):
+ *                                                      [{
+ *                                                        id, name, mandatory,
+ *                                                        modifierRenderType: "TEXT_CHOICES" | "FREE_TEXT",
+ *                                                        key,                        // present for TEXT_CHOICES modifiers
+ *                                                        choicesSettings: {          // present for TEXT_CHOICES
+ *                                                          choices: [{ key, name }]
+ *                                                        },
+ *                                                        freeTextSettings: {         // present for FREE_TEXT
+ *                                                          title, key
  *                                                        }
  *                                                      }]
  *   variantSummary.variantCount             {number}   Total number of variants.
  *   plainDescription                        {string}   Product description in HTML format.
- *   variantsInfo.variants                   {array}    [{ id, optionChoiceIds: [{ optionId, choiceId }] }].
- *                                                      Variant id → addToCart's optional variantId
- *                                                      (products with options). Only from
- *                                                      getProductBySlug, not queryProducts.
+ *   variantsInfo.variants                   {array}    Only returned by getProductBySlug, not queryProducts/queryProductsByCategory.
+ *                                                      [{
+ *                                                        id,
+ *                                                        visible,
+ *                                                        choices: [{                 // one entry per product option
+ *                                                          optionChoiceIds: { optionId, choiceId }
+ *                                                        }],
+ *                                                        price: {
+ *                                                          actualPrice: { amount, formattedAmount }
+ *                                                        },
+ *                                                        media: {                    // variant-specific image (if set)
+ *                                                          id, altText,
+ *                                                          image: { id, url, height, width, altText },
+ *                                                          mediaType
+ *                                                        },
+ *                                                        inventoryStatus: { inStock, preorderEnabled }
+ *                                                      }]
+ *                                                      To resolve a buyer's option selections to a variantId:
+ *                                                      find the variant whose choices match all selected
+ *                                                      { optionId, choiceId } pairs, then pass variant.id
+ *                                                      to addToCart. Use variant.media (if present) to show
+ *                                                      a variant-specific image on the PDP.
  */
 
 /**
  * Wix eCom Cart — key fields for building a cart UI.
- * Full model: https://dev.wix.com/docs/api-reference/business-solutions/e-commerce/purchase-flow/cart/get-cart
+ * Full model: https://dev.wix.com/docs/api-reference/business-solutions/e-commerce/purchase-flow/cart/get-cart.md
  *
  *   id                                      {string}  Cart GUID.
  *   currency                                {string}  ISO-4217 currency code.
@@ -64,7 +106,7 @@ export async function queryProducts({ limit = 100, cursor } = {}) {
   const res = await wixApiRequest("/stores/v3/products/query", {
     method: "POST",
     body: {
-      fields: ["CURRENCY", "PLAIN_DESCRIPTION"],
+      fields: ["CURRENCY", "PLAIN_DESCRIPTION", "MEDIA_ITEMS_INFO"],
       query: {
         ...(cursor ? {} : { filter: { visible: true } }),
         cursorPaging: cursor ? { limit, cursor } : { limit },
@@ -79,31 +121,52 @@ export async function queryProducts({ limit = 100, cursor } = {}) {
 
 /**
  * Fetch a product by its URL slug. Returns null if not found.
+ * Returns the full product including variantsInfo.variants (with per-variant media and choices).
  * @param {string} slug
  * @returns {Promise<object|null>}
  */
 export async function getProductBySlug(slug) {
   const res = await wixApiRequest(`/stores/v3/products/slug/${encodeURIComponent(slug)}`, {
     method: "GET",
-    query: { fields: ["CURRENCY", "PLAIN_DESCRIPTION"] },
+    query: { fields: ["CURRENCY", "PLAIN_DESCRIPTION", "MEDIA_ITEMS_INFO"] },
   });
   return res?.product ?? null;
 }
 
 /**
  * Add a product to the visitor's current cart.
- * `variantId` is optional: omit it for products without variants; for a product with options,
- * pass the chosen variant's `product.variantsInfo.variants[].id` (from getProductBySlug) to add
- * that specific variant. Throws on out-of-stock so the buyer can't reach checkout with an
- * unbuyable line — Wix would otherwise add it silently at quantity 0.
- * @param {string} catalogItemId  Product GUID (`product.id`).
- * @param {string} [variantId]    `product.variantsInfo.variants[].id` — only for products with variants.
+ *
+ * For products with options (variants), pass the chosen `variantId` — resolve it from
+ * `product.variantsInfo.variants` (from getProductBySlug) by matching the buyer's selected
+ * option choices to `variant.choices[].optionChoiceIds`. Always include variantId when the
+ * product has variants.
+ *
+ * For products with modifiers:
+ *   - TEXT_CHOICES modifiers → pass `modifierChoices`: `{ [modifier.key]: choiceKey }`.
+ *     Example: `{ "Remove price tag": "yes" }`
+ *   - FREE_TEXT modifiers → pass `customTextFields`: `{ [modifier.freeTextSettings.key]: userInput }`.
+ *     Example: `{ "Would you like to engrave something on the box?": "For my best friend!" }`
+ *   Mandatory modifiers (modifier.mandatory === true) MUST be included.
+ *
+ * Throws on out-of-stock so the buyer can't reach checkout with an unbuyable line.
+ *
+ * Full catalogReference reference:
+ * https://dev.wix.com/docs/api-reference/business-solutions/stores/catalog-v3/e-commerce-integration.md
+ *
+ * @param {string} catalogItemId          Product GUID (`product.id`).
+ * @param {string} [variantId]            `variantsInfo.variants[].id` — required for products with variants.
  * @param {number} [quantity]
+ * @param {{ modifierChoices?: Record<string,string>, customTextFields?: Record<string,string> }} [extras]
  * @returns {Promise<object>} Updated cart.
  */
-export async function addToCart(catalogItemId, variantId, quantity = 1) {
+export async function addToCart(catalogItemId, variantId, quantity = 1, { modifierChoices, customTextFields } = {}) {
+  const catalogReferenceOptions = {};
+  if (variantId) catalogReferenceOptions.variantId = variantId;
+  if (modifierChoices && Object.keys(modifierChoices).length) catalogReferenceOptions.options = modifierChoices;
+  if (customTextFields && Object.keys(customTextFields).length) catalogReferenceOptions.customTextFields = customTextFields;
+
   const catalogReference = { appId: STORES_APP_ID, catalogItemId };
-  if (variantId) catalogReference.options = { variantId };
+  if (Object.keys(catalogReferenceOptions).length) catalogReference.options = catalogReferenceOptions;
   const res = await wixApiRequest("/ecom/v1/carts/current/add-to-cart", {
     method: "POST",
     body: { lineItems: [{ catalogReference, quantity }] },
@@ -195,7 +258,7 @@ export async function queryProductsByCategory(categoryId, { limit = 100, cursor 
   const res = await wixApiRequest("/stores/v3/products/search", {
     method: "POST",
     body: {
-      fields: ["CURRENCY", "PLAIN_DESCRIPTION"],
+      fields: ["CURRENCY", "PLAIN_DESCRIPTION", "MEDIA_ITEMS_INFO"],
       search: {
         ...(cursor
           ? { cursorPaging: { limit, cursor } }
@@ -249,7 +312,7 @@ export async function queryCategories({ limit = 100, cursor } = {}) {
 /**
  * Get a single category by its URL slug. Returns null if not found.
  * Category fields: id, name, slug, visible, description, image, itemCounter, parentCategory.id
- * Full model: https://dev.wix.com/docs/api-reference/business-solutions/stores/catalog-v3/categories/get-category-by-slug
+ * Full model: https://dev.wix.com/docs/api-reference/business-solutions/stores/catalog-v3/categories/get-category-by-slug.md
  * @param {string} slug
  * @returns {Promise<object|null>}
  */
