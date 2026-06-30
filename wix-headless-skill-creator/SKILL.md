@@ -1,6 +1,6 @@
 ---
 name: wix-headless-skill-creator
-description: Meta-skill for authoring a client-only, dependency-free REST skill for ANY Wix headless business solution (Bookings, Events, Restaurants, Blog, eCommerce, etc.), modeled on the wix-storefront skill. Use when a developer wants to turn a Wix business solution into a copy-pastable storefront-style skill an agent can follow in any builder. Produces the same artifacts as wix-storefront: SKILL.md + src/rest/client.js + src/rest/<solution>.js. The output is buyer/visitor-facing, client-only REST (no SDK, no npm), and builds only user-facing screens — never "manage" screens.
+description: Meta-skill for authoring a client-only, dependency-free REST skill for ANY Wix headless business solution (Bookings, Events, Restaurants, Blog, eCommerce, etc.), modeled on the wix-storefront skill. Use when a developer wants to turn a Wix business solution into a copy-pastable storefront-style skill an agent can follow in any builder. Produces the same artifacts as wix-storefront: SKILL.md + src/rest/wix-client.js + src/rest/wix-<solution>.js. The output is buyer/visitor-facing, client-only REST (no SDK, no npm), and builds only user-facing screens — never "manage" screens.
 ---
 
 # Wix Headless Skill Creator
@@ -12,7 +12,7 @@ live Wix experience over a public `WIX_CLIENT_ID`, talking to Wix directly via
 dependency-free REST.
 
 **The reference implementation is `wix-storefront/`.** Read its `SKILL.md`,
-`src/rest/client.js`, and `src/rest/ecom.js` before you start — you are producing the same
+`src/rest/wix-client.js`, and `src/rest/wix-store.js` before you start — you are producing the same
 three files for a different business solution. When in doubt, mirror the storefront.
 
 ## What you are building (the output)
@@ -24,13 +24,13 @@ wix-<solution>/
 ├── PROMPT.md             # slim copyable site creation prompt (<WIX_CLIENT_ID> slot)
 ├── README.md             # one-screen overview pointing at SKILL.md
 └── src/rest/
-    ├── client.js         # visitor-token mint/refresh + transport — COPIED VERBATIM from wix-storefront
-    └── <solution>.js     # the thin domain client (the only file that really changes per solution)
+    ├── wix-client.js     # visitor-token mint/refresh + transport — COPIED VERBATIM from wix-storefront
+    └── wix-<solution>.js # the thin domain client (the only file that really changes per solution)
 ```
 
-`client.js` is solution-agnostic: it is the OAuth visitor-token + transport layer. **Copy it
-verbatim** from `wix-storefront/src/rest/client.js` — do not re-derive it. The real work is
-`src/rest/<solution>.js`: a small set of thin helpers over the solution's REST endpoints,
+`wix-client.js` is solution-agnostic: it is the OAuth visitor-token + transport layer. **Copy it
+verbatim** from `wix-storefront/src/rest/wix-client.js` — do not re-derive it. The real work is
+`src/rest/wix-<solution>.js`: a small set of thin helpers over the solution's REST endpoints,
 with the core data model inlined as JSDoc.
 
 ## Process — do these in order
@@ -76,13 +76,13 @@ developer and **wait for explicit approval**. Do not generate `SKILL.md` or the 
 client until the flows are signed off — this is the cheapest place to correct scope.
 
 ### 5. Generate the three files
-Copy `client.js` verbatim, write `src/rest/<solution>.js`, then write `SKILL.md`,
+Copy `wix-client.js` verbatim, write `src/rest/wix-<solution>.js`, then write `SKILL.md`,
 `PROMPT.md`, and `README.md` following the structure and design goals below.
 
 ## Design goals for the client (non-negotiable)
 - **Complete and copy-pastable.** Every snippet must run as-is once `WIX_CLIENT_ID` is set.
   No TODOs, no placeholders other than the client id, no "left as an exercise".
-- **REST over SDK.** Use plain `fetch` (via the shared `client.js` transport). No `@wix/sdk`,
+- **REST over SDK.** Use plain `fetch` (via the shared `wix-client.js` transport). No `@wix/sdk`,
   no npm packages, no query builders. This keeps onboarding instant and works on every
   builder. We give up the SDK's built-in auth/monitoring/retries on purpose — the
   zero-dependency win pays for it.
@@ -106,11 +106,11 @@ Copy `client.js` verbatim, write `src/rest/<solution>.js`, then write `SKILL.md`
   `<solution>.js` as JSDoc, with a link to the full reference (`.md` form) for anything not
   shown. This
   saves a network call and cuts iterations of fixing wrong-shape assumptions. See the
-  `Product` and `Cart` typedefs in `wix-storefront/src/rest/ecom.js` for the bar to hit.
+  `Product` and `Cart` typedefs in `wix-storefront/src/rest/wix-store.js` for the bar to hit.
 - **User-facing screens only.** No "manage"/admin screens — content is managed in the Wix
   dashboard.
 - **Provide the `WIX_CLIENT_ID`.** The skill must instruct the developer/agent to set the
-  site's public headless `WIX_CLIENT_ID` (from the site creation prompt) in `client.js`.
+  site's public headless `WIX_CLIENT_ID` (from the site creation prompt) in `wix-client.js`.
   It is buyer-facing (mints only anonymous visitor tokens), **not** a secret — safe to
   hardcode/commit.
 
@@ -128,8 +128,8 @@ Keep the same sections, in this order:
 4. **Prerequisites** — the Wix app installed + content already added; the `WIX_CLIENT_ID`
    from the prompt; any later Wix setup flow that's out of scope (e.g. domain allow-listing
    for hosted checkout) — flag-and-continue if it isn't done yet.
-5. **The API (copy as-is; do not re-derive it)** — list `client.js` and the
-   `<solution>.js` exports grouped by flow. Point to the inlined JSDoc model.
+5. **The API (copy as-is; do not re-derive it)** — list `wix-client.js` and the
+   `wix-<solution>.js` exports grouped by flow. Point to the inlined JSDoc model.
 6. **How to wire it (UI is the project's choice)** — one bullet per screen/flow, naming the
    exact helper and the key fields to render.
 7. **Hard rules (do not violate)** — ✅/❌ list: official flow only; never hand-build URLs;
@@ -144,8 +144,8 @@ Keep the same sections, in this order:
    official redirect/flow is used (no hand-built URL); empty state shown when there's no
    content; no mock data anywhere.
 
-## src/rest/<solution>.js — how to write it
-- `import { wixApiRequest } from "./client.js";` and build every call on it.
+## src/rest/wix-<solution>.js — how to write it
+- `import { wixApiRequest } from "./wix-client.js";` and build every call on it.
 - Put the inlined model JSDoc at the top (the key entities for this solution), each with a
   link to its full reference page (always the `.md` form of the URL).
 - Export thin async helpers named in plain verbs, one per mapped operation. Return the data
@@ -153,7 +153,9 @@ Keep the same sections, in this order:
   fetches). Above each helper, leave a JSDoc comment with a link to its exact Wix reference
   page (`.md` form) so the next agent can extend it without re-deriving the endpoint.
 - **Fail loudly on purpose** where a silent success would let the user reach a dead end
-  (out-of-stock, unavailable slot, empty cart) — throw, like `addToCart`/`checkout` do.
+  (out-of-stock, unavailable slot, empty cart, missing mandatory modifier) — throw, like
+  `addToCart`/`checkout` do. Mandatory modifiers/customizations must be validated before
+  submitting — surface the error to the UI rather than swallowing it.
 - Keep pagination, slug lookups, and empty-state counts consistent with the storefront's
   patterns so agents that know one skill recognize the next.
 
@@ -172,8 +174,8 @@ builder — universal support is the whole point of the REST/JS/zero-dependency 
 ## Authoring checklist (before declaring the skill done)
 - [ ] 80-20 flows + user-facing screens mapped and **approved by the developer**
 - [ ] Core business APIs mapped to exact Wix REST endpoints (verified against the reference)
-- [ ] `client.js` copied verbatim from wix-storefront (only `WIX_CLIENT_ID` to be set)
-- [ ] `src/rest/<solution>.js` written: thin verbs, inlined model JSDoc, fails loudly on dead ends
+- [ ] `wix-client.js` copied verbatim from wix-storefront (only `WIX_CLIENT_ID` to be set)
+- [ ] `src/rest/wix-<solution>.js` written: thin verbs, inlined model JSDoc, fails loudly on dead ends
 - [ ] `SKILL.md` follows the section structure above
 - [ ] `PROMPT.md` user-facing, with `<WIX_CLIENT_ID>` slot and raw SKILL.md URL
 - [ ] Only user-facing screens — no "manage"/admin screens
