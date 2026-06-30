@@ -22,6 +22,12 @@ const STORES_APP_ID = "215238eb-22a5-4c36-9e7b-e7c08025e04e";
  *   actualPriceRange.minValue.formattedAmount {string} Lowest price with currency symbol (e.g. "$199.99").
  *   actualPriceRange.maxValue.amount        {string}   Highest variant price (decimal string).
  *   actualPriceRange.maxValue.formattedAmount {string} Highest price with currency symbol.
+ *   compareAtPriceRange.minValue.amount     {string}   Lowest original (strikethrough) price (decimal string).
+ *   compareAtPriceRange.minValue.formattedAmount {string} Lowest original price with currency symbol.
+ *   compareAtPriceRange.maxValue.amount     {string}   Highest original (strikethrough) price (decimal string).
+ *   compareAtPriceRange.maxValue.formattedAmount {string} Highest original price with currency symbol.
+ *                                                      Only present when a sale price is set. Show as
+ *                                                      strikethrough next to actualPriceRange.
  *   inventory.availabilityStatus            {string}   "IN_STOCK" | "OUT_OF_STOCK" |
  *                                                      "PARTIALLY_OUT_OF_STOCK"
  *   options                                 {array}    Product options (e.g. Size, Color):
@@ -63,7 +69,8 @@ const STORES_APP_ID = "215238eb-22a5-4c36-9e7b-e7c08025e04e";
  *                                                          optionChoiceIds: { optionId, choiceId }
  *                                                        }],
  *                                                        price: {
- *                                                          actualPrice: { amount, formattedAmount }
+ *                                                          actualPrice: { amount, formattedAmount },
+ *                                                          compareAtPrice: { amount, formattedAmount }
  *                                                        },
  *                                                        media: {                    // variant-specific image (if set)
  *                                                          id, altText,
@@ -91,7 +98,17 @@ const STORES_APP_ID = "215238eb-22a5-4c36-9e7b-e7c08025e04e";
  *     quantity                              {number}
  *     catalogReference.catalogItemId        {string}  Product GUID.
  *     productName.original                  {string}  Display name.
- *     price.formattedAmount                 {string}  Price after discounts, with currency symbol.
+ *     price.formattedAmount                 {string}  Price after all discounts, with currency symbol.
+ *     fullPrice.formattedAmount             {string}  Price before any discount (strikethrough price).
+ *                                                     Show alongside price when the two differ.
+ *     descriptionLines                      {array}   Human-readable selected option/modifier labels.
+ *                                                     Render these to show the buyer's choices (e.g. "Color: Red", "Size: M").
+ *                                                     [{
+ *                                                       name: { original },   // label, e.g. "Color"
+ *                                                       // ONE-OF:
+ *                                                       plainText: { original },  // for text choices / free text
+ *                                                       colorInfo: { original, code }  // for swatch choices; code is HEX/RGB
+ *                                                     }]
  *     image.url                             {string}  Line item image URL.
  *     availability.status                   {string}  "AVAILABLE" | "NOT_AVAILABLE" |
  *                                                     "PARTIALLY_AVAILABLE" | "NOT_FOUND"
